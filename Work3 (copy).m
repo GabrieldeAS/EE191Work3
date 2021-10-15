@@ -1,0 +1,152 @@
+clear all; close all; clc;
+
+%% Simbólico para coletar expressões
+syms s P I
+
+G(s) = (1-s)/((s+1)*(s+2));
+
+K(s) = (P*s+I)/s;
+
+T(s) = K*G/(1+K*G);
+
+[N,D] = numden(T);
+N_sim = collect(N(s));
+D_sim = collect(D(s)); % de olho no denominador
+%%
+clear all; close all; clc;
+%% Visualizando a resposta em malha aberta e fechada simples
+% Útil para ver qual a respota "natural" e ordem de grandeza temporal
+
+s = tf('s');
+
+G = (1-s)/((s+1)*(s+2));
+T = G/(1+G); % uncontrolled
+
+figure();
+step(G)
+stepinfo(G)
+figure();
+step(T)
+stepinfo(T)
+
+% ramp
+figure();
+step(G/s)
+stepinfo(G/s)
+figure();
+step(T/s)
+stepinfo(T/s)
+
+%% Visualização em Coordenadas Paralelas
+
+% Força Bruta - "Passo Largo"
+
+count = 1;
+KpArray = -1.9:0.1:2.9;
+KiStep = 10;
+% pre-allocate Size
+Kp = zeros(length(KpArray)*KiStep,1);
+Ki = zeros(length(KpArray)*KiStep,1);
+ts = zeros(length(KpArray)*KiStep,1);
+Mp = zeros(length(KpArray)*KiStep,1);
+Und = zeros(length(KpArray)*KiStep,1);
+Erampa = zeros(length(KpArray)*KiStep,1);
+
+for i = KpArray
+    Ki_sup = (i-3)*(i+2)/(i-4); % estritamente é o supremo
+    epsilon = Ki_sup/100; % limite arbitrário
+    KiArray = (epsilon):(Ki_sup/KiStep):(Ki_sup-epsilon); % 10 valores
+    for j = KiArray
+        k = [i j];
+        valores = var_analise(k);
+        %
+        Kp(count,1) = i;
+        Ki(count,1) = j;
+        ts(count,1) = valores(1);
+        Mp(count,1) = valores(2);
+        Und(count,1) = valores(3);
+        Erampa(count,1) = valores(4);
+        %
+        count = count + 1;
+    end
+end
+tableBF = table(Kp, Ki, ts, Mp, Und, Erampa);
+
+% Gráfico
+figure();
+parallelplot(tableBF);
+set(gcf,'color','w');
+title("Representação de Espaço Discretizado em Coordenadas Paralelas");
+
+%%
+clear all; close all; clc;
+%% Método de Otimização
+% Método de Nelder-Mead
+
+rng(321); % random seed -> para reproducibilidade
+totalIt = 30;
+% pre-allocate Size
+d = zeros(totalIt,4);
+Kp0 = zeros(totalIt,1);
+Ki0 = zeros(totalIt,1);
+Kp = zeros(totalIt,1);
+Ki = zeros(totalIt,1);
+ts = zeros(totalIt,1);
+Mp = zeros(totalIt,1);
+Und = zeros(totalIt,1);
+Erampa = zeros(totalIt,1);
+%
+
+for i = 1:1:totalIt
+    
+    while (Kp(i,1) <= -2 || Kp(i,1) >= 3 || Ki(i,1) <= 0) % just as precaution
+    
+        d(i,:) = [3.0+3.0*rand(),0.05+0.1*rand(),0.05+0.1*rand(),2.0+1.5*rand()];
+        Kp0(i,1) = -2 + 5*rand();
+        Ki_sup = (Kp0(i,1)-3)*(Kp0(i,1)+2)/(Kp0(i,1)-4);
+        Ki0(i,1) = Ki_sup*rand();
+
+        x0 = [Kp0, Ki0];
+        J = @(x) cost_function(d(i,:), x);
+        x = fminsearch(J, x0);
+        valores = var_analise(x);
+
+        Kp(i,1) = x(1);
+        Ki(i,1) = x(2);
+        ts(i,1) = valores(1);
+        Mp(i,1) = valores(2);
+        Und(i,1) = valores(3);
+        Erampa(i,1) = valores(4);
+    end
+    
+end
+tableOpt = table(Kp, Ki, ts, Mp, Und, Erampa);
+
+%%
+clear all; close all; clc;
+%% Gráfico de Resultados Ótimos
+
+%Kp = [0.183188489516079;0.676130876959941;0.247511031568209; ...
+%    0.120478331417029;0.485841797500900;0.368169366491300];
+%Ki = [0.472724317396447;0.724891954430572;0.503612269109657; ...
+%    0.515523122997371;0.653663782784662;0.547660250671736];
+
+ts = [6.78000000000000;4.04000000000000;6.34000000000000; ...
+    6.18000000000000;4.70000000000000;5.78000000000000];
+Mp = [0.0322474104183128;0.0492961874218769;0.0333331256772158; ...
+    0.0791882426506179;0.0585939237411819;0.0269860729729881];
+Und = [0.0702417053615262;0.180361937245472;0.0821449662602555; ...
+    0.0686205355297025;0.136513575429206;0.105522924098771];
+Erampa = [4.23079568027112;2.75903186368108;3.97130912544253; ...
+    3.87955439975521;3.05967693587035;3.65189914284794];
+
+tableSelect = table(ts, Mp, Und, Erampa);
+
+figure();
+    p = parallelplot(tableSelect);
+    set(gcf,'color','w');
+    title("Soluções Ótimas em Coordenadas Paralelas");
+
+
+
+
